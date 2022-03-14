@@ -12,8 +12,10 @@
 --
 -- Copyright 2022 Jon Andrew
 -------------------------------------------------------------------------------
+with GNAT.Sockets;
 with Interfaces;
 with Interfaces.C;
+with Interfaces.C.Strings;
 with System;
 
 package liburing is
@@ -359,14 +361,20 @@ package liburing is
     end record with Convention => C_Pass_By_Copy;
 
     type Message_Header is record
-      msg_name       : System.Address;
-      msg_namelen    : aliased Interfaces.C.unsigned;
-      msg_iov        : access IO_Vector;
-      msg_iovlen     : aliased Interfaces.C.size_t;
-      msg_control    : System.Address;
-      msg_controllen : aliased Interfaces.C.size_t;
-      msg_flags      : aliased Interfaces.C.int;
+        msg_name       : System.Address;
+        msg_namelen    : aliased Interfaces.C.unsigned;
+        msg_iov        : access IO_Vector;
+        msg_iovlen     : aliased Interfaces.C.size_t;
+        msg_control    : System.Address;
+        msg_controllen : aliased Interfaces.C.size_t;
+        msg_flags      : aliased Interfaces.C.int;
    end record with Convention => C_Pass_By_Copy;
+
+    type Open_How is record
+        flags   : aliased Interfaces.Unsigned_64;
+        mode    : aliased Interfaces.Unsigned_64;
+        resolve : aliased Interfaces.Unsigned_64;
+    end record with Convention => C_Pass_By_Copy;
 
     ---------------------------------------------------------------------------
     -- Get_Probe_Ring
@@ -499,7 +507,7 @@ package liburing is
     ---------------------------------------------------------------------------
     -- Submit_And_Wait_Timeout
     ---------------------------------------------------------------------------
-    function Submit_And_Wait_Timeout (ring    : access Ring;
+    function Submit_And_Wait_Timeout (r       : access Ring;
                                       cqe_ptr : System.Address;
                                       wait_nr : Interfaces.C.unsigned;
                                       ts      : access Kernel_Timespec;
@@ -691,7 +699,7 @@ package liburing is
     ---------------------------------------------------------------------------
     -- Register_IOWQ_Max_Workers
     ---------------------------------------------------------------------------
-    function Register_IOWQ_Max_Workers (r : access Ring; values : access unsigned) return Interfaces.C.int
+    function Register_IOWQ_Max_Workers (r : access Ring; values : access Interfaces.C.unsigned) return Interfaces.C.int
     with Import => True, 
          Convention => C, 
          External_Name => "io_uring_register_iowq_max_workers";
@@ -889,7 +897,7 @@ package liburing is
     ---------------------------------------------------------------------------
     procedure Prep_Recvmsg (sqe   : access Submission_Queue_Entry;
                             fd    : Interfaces.C.int;
-                            msg   : access x86_64_linux_gnu_bits_socket_h.msghdr;
+                            msg   : access Message_Header;
                             flags : Interfaces.C.unsigned)
     with Import => True, 
          Convention => C, 
@@ -937,7 +945,7 @@ package liburing is
     ---------------------------------------------------------------------------
     -- Prep_Poll_Update
     ---------------------------------------------------------------------------
-    procedure prep_poll_update (sqe           : access Submission_Queue_Entry;
+    procedure Prep_Poll_Update (sqe           : access Submission_Queue_Entry;
                                 old_user_data : Interfaces.Unsigned_64;
                                 new_user_data : Interfaces.Unsigned_64;
                                 poll_mask     : Interfaces.C.unsigned;
@@ -1034,337 +1042,416 @@ package liburing is
     ---------------------------------------------------------------------------
     -- Prep_Link_Timeout
     ---------------------------------------------------------------------------
-    procedure prep_link_timeout
-        (sqe : access Submission_Queue_Entry;
-        ts : access linux_time_types_h.uu_kernel_timespec;
-        flags : Interfaces.C.unsigned)  -- ../liburing.h:505
+    procedure Prep_Link_Timeout (sqe   : access Submission_Queue_Entry;
+                                 ts    : access Kernel_Timespec;
+                                 flags : Interfaces.C.unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_link_timeout";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_link_timeout";
 
-    procedure prep_connect
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        addr : access constant x86_64_linux_gnu_bits_socket_h.sockaddr;
-        addrlen : x86_64_linux_gnu_bits_socket_h.socklen_t)  -- ../liburing.h:513
+    ---------------------------------------------------------------------------
+    -- Prep_Connect
+    ---------------------------------------------------------------------------
+    procedure Prep_Connect (sqe : access Submission_Queue_Entry;
+                            fd : Interfaces.C.int;
+                            addr : access constant GNAT.Sockets.Sock_Addr_Type;
+                            addrlen : Interfaces.C.Unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_connect";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_connect";
 
-    procedure prep_files_update
-        (sqe : access Submission_Queue_Entry;
-        fds : access Interfaces.C.int;
-        nr_fds : Interfaces.C.unsigned;
-        offset : Interfaces.C.int)  -- ../liburing.h:520
+    ---------------------------------------------------------------------------
+    -- Prep_Files_Update
+    ---------------------------------------------------------------------------
+    procedure Prep_Files_Update (sqe    : access Submission_Queue_Entry;
+                                 fds    : access Interfaces.C.int;
+                                 nr_fds : Interfaces.C.unsigned;
+                                 offset : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_files_update";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_files_update";
 
-    procedure prep_fallocate
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        mode : Interfaces.C.int;
-        offset : x86_64_linux_gnu_sys_types_h.off_t;
-        len : x86_64_linux_gnu_sys_types_h.off_t)  -- ../liburing.h:528
+    ---------------------------------------------------------------------------
+    -- Prep_FAllocate
+    ---------------------------------------------------------------------------
+    procedure Prep_FAllocate (sqe    : access Submission_Queue_Entry;
+                              fd     : Interfaces.C.int;
+                              mode   : Interfaces.C.int;
+                              offset : Interfaces.Unsigned_64;
+                              len    : Interfaces.Unsigned_64)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_fallocate";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_fallocate";
 
-    procedure prep_openat
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        flags : Interfaces.C.int;
-        mode : x86_64_linux_gnu_sys_types_h.mode_t)  -- ../liburing.h:537
+    ---------------------------------------------------------------------------
+    -- Prep_Open_At
+    ---------------------------------------------------------------------------
+    procedure Prep_Open_At (sqe   : access Submission_Queue_Entry;
+                            dfd   : Interfaces.C.int;
+                            path  : Interfaces.C.Strings.chars_ptr;
+                            flags : Interfaces.C.int;
+                            mode  : Interfaces.C.unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_openat";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_openat";
 
-    procedure prep_openat_direct
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        flags : Interfaces.C.int;
-        mode : x86_64_linux_gnu_sys_types_h.mode_t;
-        file_index : Interfaces.C.unsigned)  -- ../liburing.h:545
+    ---------------------------------------------------------------------------
+    -- Prep_Open_At_Direct
+    ---------------------------------------------------------------------------
+    procedure Prep_Open_At_Direct (sqe        : access Submission_Queue_Entry;
+                                   dfd        : Interfaces.C.int;
+                                   path       : Interfaces.C.Strings.chars_ptr;
+                                   flags      : Interfaces.C.int;
+                                   mode       : Interfaces.C.unsigned;
+                                   file_index : Interfaces.C.unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_openat_direct";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_openat_direct";
 
-    procedure prep_close (sqe : access Submission_Queue_Entry; fd : Interfaces.C.int)  -- ../liburing.h:555
+    ---------------------------------------------------------------------------
+    -- Prep_Close
+    ---------------------------------------------------------------------------
+    procedure Prep_Close (sqe : access Submission_Queue_Entry; fd : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_close";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_close";
 
-    procedure prep_close_direct (sqe : access Submission_Queue_Entry; file_index : Interfaces.C.unsigned)  -- ../liburing.h:560
+    ---------------------------------------------------------------------------
+    -- Prep_Close_Direct
+    ---------------------------------------------------------------------------
+    procedure Prep_Close_Direct (sqe : access Submission_Queue_Entry; file_index : Interfaces.C.unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_close_direct";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_close_direct";
 
-    procedure prep_read
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        buf : System.Address;
-        nbytes : Interfaces.C.unsigned;
-        offset : Interfaces.Unsigned_64)  -- ../liburing.h:567
+    ---------------------------------------------------------------------------
+    -- Prep_Read
+    ---------------------------------------------------------------------------
+    procedure Prep_Read (sqe    : access Submission_Queue_Entry;
+                         fd     : Interfaces.C.int;
+                         buf    : System.Address;
+                         nbytes : Interfaces.C.unsigned;
+                         offset : Interfaces.Unsigned_64)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_read";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_read";
 
-    procedure prep_write
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        buf : System.Address;
-        nbytes : Interfaces.C.unsigned;
-        offset : Interfaces.Unsigned_64)  -- ../liburing.h:573
+    ---------------------------------------------------------------------------
+    -- Prep_Write
+    ---------------------------------------------------------------------------
+    procedure prep_write (sqe    : access Submission_Queue_Entry;
+                          fd     : Interfaces.C.int;
+                          buf    : System.Address;
+                          nbytes : Interfaces.C.unsigned;
+                          offset : Interfaces.Unsigned_64)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_write";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_write";
 
-    type statx is null record;   -- incomplete struct
+    -- type statx is null record;   -- incomplete struct
 
-    procedure prep_statx
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        flags : Interfaces.C.int;
-        mask : Interfaces.C.unsigned;
-        statxbuf : access statx)  -- ../liburing.h:580
+    -- procedure prep_statx (sqe      : access Submission_Queue_Entry;
+    --                       dfd      : Interfaces.C.int;
+    --                       path     : Interfaces.C.Strings.chars_ptr;
+    --                       flags    : Interfaces.C.int;
+    --                       mask     : Interfaces.C.unsigned;
+    --                       statxbuf : access statx)  -- ../liburing.h:580
+    -- with Import => True, 
+    --         Convention => C, 
+    --         External_Name => "wrap_io_uring_prep_statx";
+
+    ---------------------------------------------------------------------------
+    -- Prep_FAdvise
+    ---------------------------------------------------------------------------
+    procedure Prep_FAdvise (sqe    : access Submission_Queue_Entry;
+                            fd     : Interfaces.C.int;
+                            offset : Interfaces.Unsigned_64;
+                            len    : Interfaces.C.long;
+                            advice : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_statx";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_fadvise";
 
-    procedure prep_fadvise
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        offset : Interfaces.Unsigned_64;
-        len : x86_64_linux_gnu_sys_types_h.off_t;
-        advice : Interfaces.C.int)  -- ../liburing.h:589
+    ---------------------------------------------------------------------------
+    -- Prep_MAdvise
+    ---------------------------------------------------------------------------
+    procedure Prep_MAdvise (sqe    : access Submission_Queue_Entry;
+                            addr   : System.Address;
+                            length : Interfaces.C.long;
+                            advice : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_fadvise";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_madvise";
 
-    procedure prep_madvise
-        (sqe : access Submission_Queue_Entry;
-        addr : System.Address;
-        length : x86_64_linux_gnu_sys_types_h.off_t;
-        advice : Interfaces.C.int)  -- ../liburing.h:596
+    ---------------------------------------------------------------------------
+    -- Prep_Send
+    ---------------------------------------------------------------------------
+    procedure Prep_Send (sqe    : access Submission_Queue_Entry;
+                         sockfd : Interfaces.C.int;
+                         buf    : System.Address;
+                         len    : Interfaces.C.size_t;
+                         flags  : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_madvise";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_send";
 
-    procedure prep_send
-        (sqe : access Submission_Queue_Entry;
-        sockfd : Interfaces.C.int;
-        buf : System.Address;
-        len : stddef_h.size_t;
-        flags : Interfaces.C.int)  -- ../liburing.h:603
+    ---------------------------------------------------------------------------
+    -- Prep_Recv
+    ---------------------------------------------------------------------------
+    procedure Prep_Recv (sqe    : access Submission_Queue_Entry;
+                         sockfd : Interfaces.C.int;
+                         buf    : System.Address;
+                         len    : Interfaces.C.size_t;
+                         flags  : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_send";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_recv";
 
-    procedure prep_recv
-        (sqe : access Submission_Queue_Entry;
-        sockfd : Interfaces.C.int;
-        buf : System.Address;
-        len : stddef_h.size_t;
-        flags : Interfaces.C.int)  -- ../liburing.h:610
+    ---------------------------------------------------------------------------
+    -- Prep_Open_At2
+    ---------------------------------------------------------------------------
+    procedure Prep_Open_At2 (sqe  : access Submission_Queue_Entry;
+                             dfd  : Interfaces.C.int;
+                             path : Interfaces.C.Strings.chars_ptr;
+                             how  : access Open_How)
+    with Import => True,
+         Convention => C,
+         External_Name => "wrap_io_uring_prep_openat2";
+
+    ---------------------------------------------------------------------------
+    -- Prep_Open_At2_Direct
+    ---------------------------------------------------------------------------
+    procedure Prep_Open_At2_Direct (sqe        : access Submission_Queue_Entry;
+                                    dfd        : Interfaces.C.int;
+                                    path       : Interfaces.C.Strings.chars_ptr;
+                                    how        : access Open_How;
+                                    file_index : Interfaces.C.unsigned)
+    with Import => True,
+         Convention => C,
+         External_Name => "wrap_io_uring_prep_openat2_direct";
+
+    -- type epoll_event is null record;   -- incomplete struct
+
+    -- procedure prep_epoll_ctl
+    --     (sqe : access Submission_Queue_Entry;
+    --     epfd : Interfaces.C.int;
+    --     fd : Interfaces.C.int;
+    --     op : Interfaces.C.int;
+    --     ev : access epoll_event)  -- ../liburing.h:635
+    -- with Import => True, 
+    --         Convention => C, 
+    --         External_Name => "wrap_io_uring_prep_epoll_ctl";
+
+    ---------------------------------------------------------------------------
+    -- Prep_Provide_Buffers
+    ---------------------------------------------------------------------------
+    procedure Prep_Provide_Buffers (sqe  : access Submission_Queue_Entry;
+                                    addr : System.Address;
+                                    len  : Interfaces.C.int;
+                                    nr   : Interfaces.C.int;
+                                    bgid : Interfaces.C.int;
+                                    bid  : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_recv";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_provide_buffers";
 
-    procedure prep_openat2
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        how : access compat_h.open_how)  -- ../liburing.h:617
+    ---------------------------------------------------------------------------
+    -- Prep_Remove_Buffers
+    ---------------------------------------------------------------------------
+    procedure Prep_Remove_Buffers (sqe  : access Submission_Queue_Entry;
+                                   nr   : Interfaces.C.int;
+                                   bgid : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_openat2";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_remove_buffers";
 
-    procedure prep_openat2_direct
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        how : access compat_h.open_how;
-        file_index : Interfaces.C.unsigned)  -- ../liburing.h:625
+    ---------------------------------------------------------------------------
+    -- Prep_Shutdown
+    ---------------------------------------------------------------------------
+    procedure Prep_Shutdown (sqe : access Submission_Queue_Entry;
+                             fd  : Interfaces.C.int;
+                             how : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_openat2_direct";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_shutdown";
 
-    type epoll_event is null record;   -- incomplete struct
-
-    procedure prep_epoll_ctl
-        (sqe : access Submission_Queue_Entry;
-        epfd : Interfaces.C.int;
-        fd : Interfaces.C.int;
-        op : Interfaces.C.int;
-        ev : access epoll_event)  -- ../liburing.h:635
+    ---------------------------------------------------------------------------
+    -- Prep_Unlink_At
+    ---------------------------------------------------------------------------
+    procedure Prep_Unlink_At (sqe   : access Submission_Queue_Entry;
+                              dfd   : Interfaces.C.int;
+                              path  : Interfaces.C.Strings.chars_ptr;
+                              flags : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_epoll_ctl";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_unlinkat";
 
-    procedure prep_provide_buffers
-        (sqe : access Submission_Queue_Entry;
-        addr : System.Address;
-        len : Interfaces.C.int;
-        nr : Interfaces.C.int;
-        bgid : Interfaces.C.int;
-        bid : Interfaces.C.int)  -- ../liburing.h:643
+    ---------------------------------------------------------------------------
+    -- Prep_Rename_At
+    ---------------------------------------------------------------------------
+    procedure Prep_Rename_At (sqe     : access Submission_Queue_Entry;
+                              olddfd  : Interfaces.C.int;
+                              oldpath : Interfaces.C.Strings.chars_ptr;
+                              newdfd  : Interfaces.C.int;
+                              newpath : Interfaces.C.Strings.chars_ptr;
+                              flags   : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_provide_buffers";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_renameat";
 
-    procedure prep_remove_buffers
-        (sqe : access Submission_Queue_Entry;
-        nr : Interfaces.C.int;
-        bgid : Interfaces.C.int)  -- ../liburing.h:652
+    ---------------------------------------------------------------------------
+    -- Prep_Sync_File_Range
+    ---------------------------------------------------------------------------
+    procedure Prep_Sync_File_Range (sqe    : access Submission_Queue_Entry;
+                                    fd     : Interfaces.C.int;
+                                    len    : Interfaces.C.unsigned;
+                                    offset : Interfaces.Unsigned_64;
+                                    flags  : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_remove_buffers";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_sync_file_range";
 
-    procedure prep_shutdown
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        how : Interfaces.C.int)  -- ../liburing.h:659
+    ---------------------------------------------------------------------------
+    -- Prep_Mkdir_At
+    ---------------------------------------------------------------------------
+    procedure Prep_Mkdir_At (sqe  : access Submission_Queue_Entry;
+                             dfd  : Interfaces.C.int;
+                             path : Interfaces.C.Strings.chars_ptr;
+                             mode : Interfaces.C.unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_shutdown";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_mkdirat";
 
-    procedure prep_unlinkat
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        flags : Interfaces.C.int)  -- ../liburing.h:665
+    ---------------------------------------------------------------------------
+    -- Prep_Symlink_At
+    ---------------------------------------------------------------------------
+    procedure Prep_Symlink_At (sqe      : access Submission_Queue_Entry;
+                               target   : Interfaces.C.Strings.chars_ptr;
+                               newdirfd : Interfaces.C.int;
+                               linkpath : Interfaces.C.Strings.chars_ptr)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_unlinkat";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_symlinkat";
 
-    procedure prep_renameat
-        (sqe : access Submission_Queue_Entry;
-        olddfd : Interfaces.C.int;
-        oldpath : Interfaces.C.Strings.chars_ptr;
-        newdfd : Interfaces.C.int;
-        newpath : Interfaces.C.Strings.chars_ptr;
-        flags : Interfaces.C.int)  -- ../liburing.h:672
+    ---------------------------------------------------------------------------
+    -- Prep_Link_At
+    ---------------------------------------------------------------------------
+    procedure Prep_Link_At (sqe     : access Submission_Queue_Entry;
+                            olddfd  : Interfaces.C.int;
+                            oldpath : Interfaces.C.Strings.chars_ptr;
+                            newdfd  : Interfaces.C.int;
+                            newpath : Interfaces.C.Strings.chars_ptr;
+                            flags   : Interfaces.C.int)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_renameat";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_linkat";
 
-    procedure prep_sync_file_range
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        len : Interfaces.C.unsigned;
-        offset : Interfaces.Unsigned_64;
-        flags : Interfaces.C.int)  -- ../liburing.h:681
+    ---------------------------------------------------------------------------
+    -- 
+    ---------------------------------------------------------------------------
+    procedure Prep_Msg_Ring (sqe   : access Submission_Queue_Entry;
+                             fd    : Interfaces.C.int;
+                             len   : Interfaces.C.unsigned;
+                             data  : Interfaces.Unsigned_64;
+                             flags : Interfaces.C.unsigned)
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_sync_file_range";
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_msg_ring";
 
-    procedure prep_mkdirat
-        (sqe : access Submission_Queue_Entry;
-        dfd : Interfaces.C.int;
-        path : Interfaces.C.Strings.chars_ptr;
-        mode : x86_64_linux_gnu_sys_types_h.mode_t)  -- ../liburing.h:689
+    ---------------------------------------------------------------------------
+    -- Submission_Queue_Ready
+    ---------------------------------------------------------------------------
+    function Submission_Queue_Ready (r : access constant Ring) return Interfaces.C.unsigned
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_mkdirat";
+         Convention => C, 
+         External_Name => "wrap_io_uring_sq_ready";
 
-    procedure prep_symlinkat
-        (sqe : access Submission_Queue_Entry;
-        target : Interfaces.C.Strings.chars_ptr;
-        newdirfd : Interfaces.C.int;
-        linkpath : Interfaces.C.Strings.chars_ptr)  -- ../liburing.h:695
+    ---------------------------------------------------------------------------
+    -- Submission_Queue_Space_Left
+    ---------------------------------------------------------------------------
+    function Submission_Queue_Space_Left (r : access constant Ring) return Interfaces.C.unsigned
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_symlinkat";
+         Convention => C, 
+         External_Name => "wrap_io_uring_sq_space_left";
 
-    procedure prep_linkat
-        (sqe : access Submission_Queue_Entry;
-        olddfd : Interfaces.C.int;
-        oldpath : Interfaces.C.Strings.chars_ptr;
-        newdfd : Interfaces.C.int;
-        newpath : Interfaces.C.Strings.chars_ptr;
-        flags : Interfaces.C.int)  -- ../liburing.h:702
+    ---------------------------------------------------------------------------
+    -- Submission_Queue_Ring_Wait
+    -- To be used when using SQPOLL - Allows caller to wait for free space in
+    -- the SQ ring (i.e. kernel thread has consumed one or more entries)
+    -- @return -EINVAL if kernel does not support this feature
+    ---------------------------------------------------------------------------
+    function Submission_Queue_Ring_Wait (r : access Ring) return Interfaces.C.int
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_linkat";
+         Convention => C, 
+         External_Name => "wrap_io_uring_sqring_wait";
 
-    procedure prep_msg_ring
-        (sqe : access Submission_Queue_Entry;
-        fd : Interfaces.C.int;
-        len : Interfaces.C.unsigned;
-        data : Interfaces.Unsigned_64;
-        flags : Interfaces.C.unsigned)  -- ../liburing.h:711
+    ---------------------------------------------------------------------------
+    -- Completion_Queue_Ready
+    -- @return number of unconsumed entries ready in the CQ ring
+    ---------------------------------------------------------------------------
+    function Completion_Queue_Ready (r : access constant Ring) return Interfaces.C.unsigned
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_prep_msg_ring";
+         Convention => C, 
+         External_Name => "wrap_io_uring_cq_ready";
 
-    function sq_ready (ring : access constant Ring) return Interfaces.C.unsigned  -- ../liburing.h:723
+    ---------------------------------------------------------------------------
+    -- Completion_Queue_Eventfd_Enabled
+    -- @return True if eventfd notification is enabled
+    ---------------------------------------------------------------------------
+    function Completion_Queue_Eventfd_Enabled (r : access constant Ring) return Boolean
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_sq_ready";
+         Convention => C,
+         External_Name => "wrap_io_uring_cq_eventfd_enabled";
 
-    function sq_space_left (ring : access constant Ring) return Interfaces.C.unsigned  -- ../liburing.h:740
+    ---------------------------------------------------------------------------
+    -- Completion_Queue_Eventfd_Toggle
+    ---------------------------------------------------------------------------
+    function Completion_Queue_Eventfd_Toggle (r : access Ring; enabled : Boolean) return Interfaces.C.int
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_sq_space_left";
+         Convention => C, 
+         External_Name => "wrap_io_uring_cq_eventfd_toggle";
 
-    function sqring_wait (r : access Ring) return Interfaces.C.int  -- ../liburing.h:752
+    ---------------------------------------------------------------------------
+    -- Wait_Completion_Queue_Entry_Number
+    -- @return an IO completion, waiting for 'wait_nr' completions if one isn't
+    -- readily available.
+    -- @return 0 with cqe_ptr filled in on success, -errno on failure.
+    ---------------------------------------------------------------------------
+    function Wait_Completion_Queue_Entry_Number (r       : access Ring;
+                                                 cqe_ptr : System.Address;
+                                                 wait_nr : Interfaces.C.unsigned) return Interfaces.C.int
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_sqring_wait";
+         Convention => C, 
+         External_Name => "wrap_io_uring_wait_cqe_nr";
 
-    function cq_ready (ring : access constant Ring) return Interfaces.C.unsigned  -- ../liburing.h:765
+    ---------------------------------------------------------------------------
+    -- Peek_Completion_Queue_Entry
+    -- @return an IO completion, if one is available. Returns 0 with cqe_ptr
+    --  filled in on success, -errno on failure.
+    -- @param cqe_ptr - address of an access to Completion_Queue_Entry type
+    ---------------------------------------------------------------------------
+    function Peek_Completion_Queue_Entry (r : access Ring; cqe_ptr : System.Address) return Interfaces.C.int
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_cq_ready";
+         Convention => C, 
+         External_Name => "wrap_io_uring_peek_cqe";
 
-    function cq_eventfd_enabled (ring : access constant Ring) return Extensions.bool  -- ../liburing.h:773
+    ---------------------------------------------------------------------------
+    -- Wait_Completion_Queue_Entry
+    -- @return an IO completion, blocking if necessary. Returns 0 with cqe_ptr
+    --  filled in on success, -errno on failure.
+    ---------------------------------------------------------------------------
+    function Wait_Completion_Queue_Entry (r : access Ring; cqe_ptr : System.Address) return Interfaces.C.int
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_cq_eventfd_enabled";
+         Convention => C, 
+         External_Name => "wrap_io_uring_wait_cqe";
 
-    function cq_eventfd_toggle (r : access Ring; enabled : Extensions.bool) return Interfaces.C.int  -- ../liburing.h:785
+    ---------------------------------------------------------------------------
+    -- Get_Submission_Queue_Entry
+    -- @return an SQE to fill. Returns a vacant sqe, or null if sq is full.
+    ---------------------------------------------------------------------------
+    function Get_Submission_Queue_Entry (r : access Ring) return access Submission_Queue_Entry
     with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_cq_eventfd_toggle";
-
-    function wait_cqe_nr
-        (r : access Ring;
-        cqe_ptr : System.Address;
-        wait_nr : Interfaces.C.unsigned) return Interfaces.C.int  -- ../liburing.h:813
-    with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_wait_cqe_nr";
-
-    --  skipped func __io_uring_peek_cqe
-
-    function peek_cqe (r : access Ring; cqe_ptr : System.Address) return Interfaces.C.int  -- ../liburing.h:867
-    with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_peek_cqe";
-
-    function wait_cqe (r : access Ring; cqe_ptr : System.Address) return Interfaces.C.int  -- ../liburing.h:880
-    with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_wait_cqe";
-
-    --  skipped func _io_uring_get_sqe
-
-    function get_sqe (r : access Ring) return access Submission_Queue_Entry  -- ../liburing.h:911
-    with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_get_sqe";
-
-    function mlock_size (entries : Interfaces.C.unsigned; flags : Interfaces.C.unsigned) return x86_64_linux_gnu_sys_types_h.ssize_t  -- ../liburing.h:919
-    with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_mlock_size";
-
-    function mlock_size_params (entries : Interfaces.C.unsigned; p : access Params) return x86_64_linux_gnu_sys_types_h.ssize_t  -- ../liburing.h:920
-    with Import => True, 
-            Convention => C, 
-            External_Name => "wrap_io_uring_mlock_size_params";
+         Convention => C, 
+         External_Name => "wrap_io_uring_get_sqe";
 
 end liburing;

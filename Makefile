@@ -14,4 +14,5 @@ liburing:
 
 liburing-ada.a:
 	gcc -c -Iliburing/src/include liburing-ada.c
-	ar crs liburing-ada.a liburing-ada.o liburing/src/liburing.a
+	cp liburing/src/liburing.a liburing-ada.a
+	ar rsv liburing-ada.a liburing-ada.o
