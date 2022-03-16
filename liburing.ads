@@ -1117,6 +1117,14 @@ package liburing is
          External_Name => "wrap_io_uring_prep_close";
 
     ---------------------------------------------------------------------------
+    -- Prep_Close (GNAT Socket)
+    ---------------------------------------------------------------------------
+    procedure Prep_Close (sqe : access Submission_Queue_Entry; sockfd : GNAT.Sockets.Socket_Type)
+    with Import => True, 
+         Convention => C, 
+         External_Name => "wrap_io_uring_prep_close";
+
+    ---------------------------------------------------------------------------
     -- Prep_Close_Direct
     ---------------------------------------------------------------------------
     procedure Prep_Close_Direct (sqe : access Submission_Queue_Entry; file_index : Interfaces.C.unsigned)
@@ -1139,7 +1147,7 @@ package liburing is
     ---------------------------------------------------------------------------
     -- Prep_Write
     ---------------------------------------------------------------------------
-    procedure prep_write (sqe    : access Submission_Queue_Entry;
+    procedure Prep_Write (sqe    : access Submission_Queue_Entry;
                           fd     : Interfaces.C.int;
                           buf    : System.Address;
                           nbytes : Interfaces.C.unsigned;
@@ -1187,7 +1195,7 @@ package liburing is
     -- Prep_Send
     ---------------------------------------------------------------------------
     procedure Prep_Send (sqe    : access Submission_Queue_Entry;
-                         sockfd : Interfaces.C.int;
+                         sockfd : GNAT.Sockets.Socket_Type;
                          buf    : System.Address;
                          len    : Interfaces.C.size_t;
                          flags  : Interfaces.C.int)
@@ -1199,7 +1207,7 @@ package liburing is
     -- Prep_Recv
     ---------------------------------------------------------------------------
     procedure Prep_Recv (sqe    : access Submission_Queue_Entry;
-                         sockfd : Interfaces.C.int;
+                         sockfd : GNAT.Sockets.Socket_Type;
                          buf    : System.Address;
                          len    : Interfaces.C.size_t;
                          flags  : Interfaces.C.int)
